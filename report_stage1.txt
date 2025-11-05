@@ -1,0 +1,48 @@
+1)Execution times for 
+  n=1 -- 0.20s
+  n=2 -- 0.12s
+  n=4 -- 0.11s
+  n=8 -- 0.10s
+
+2)Speedup calculations for
+  n=1 -- 
+Sequential time: 0.26s
+Parallel time:   0.20s
+Speedup (T_seq / T_par): 1.27x
+  n=2 --
+Sequential time: 0.25s
+Parallel time:   0.12s
+Speedup (T_seq / T_par): 2.17x
+  n=4 --
+Sequential time: 0.32s
+Parallel time:   0.11s
+Speedup (T_seq / T_par): 2.93x
+  n=8 --
+Sequential time: 0.67s
+Parallel time:   0.10s
+Speedup (T_seq / T_par): 6.75x
+
+3)Efficiency Analysis for
+  n=1 -- 1.27
+  n=2 -- 2.17/2 = 1.085
+  n=3 -- 2.93/4 ~ 0.73
+  n=4 -- 6.75/8 ~ 0.84
+
+4)Work Distribution Strategy  - 
+  The work distribution in the parallel log analyser follows a static round-robin strategy.
+  The master process first collects the list of all available .log files and distributes them evenly among all participating MPI processes.
+  This is implemented using the expression chunks[i % num_procs], which assigns each file to a process in cyclic order.
+  Consequently, every process receives approximately the same number of files, even if the file sizes vary.
+  This approach ensures a balanced workload with the overhead of static scheduling, which is appropriate for the Stage 1 static analysis requirement.
+  Also, I realised that as the master here doesnt have to continuously keep working, and sits idle after 
+5)Challenges faced 
+  1 - I earlier tried using the reduce() and MPI.SUM function to sum the individual dictionaries of counts of each level of each worker directly, but later learned that it cannot directly be used for 
+      adding dictionaries in that manner. So I learned that I would have to create a list and then loop through it to add the dictionaries and store the counts in a new dictionary. 
+  2 - Running the base_log_analyser gives different runtimes each time it is run. So my earlier approach of just running it once and taking that runtime as a static runtime for sequential analysis was
+      innacurate. Hence, as a solution I applied a method called sub process in the parallel_log_analyser itself that runs the base_log_analyser file each time the former is run, so that both times are calculated 
+      simultaneously and the corresponding speedup. This was considered better because the conditions (of CPU scheduling) will be the same for both so both the times will be nearly equally affected. There is still
+      a problem of one operation filling the cache for the other to run faster. But of all other methods, I found this one to be more feasible and quick.
+  3 - I faced the problem of there not being enough cores on my CPU to make 8 individual workers for the last case, and hence I made the process partially sequential using --oversubscribe which basically 
+      does time-sharing of the CPU storage between workers.
+6)Observations about scalability - Adding more CPU cores as workers gives a better runtime. So scalacility is limited only by the number of cores that are available. So it is greatly scalable, just get a CPU
+                                   with more cores and efficiency increases. 

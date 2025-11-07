@@ -3,7 +3,7 @@ import os
 import sys
 import time
 from collections import defaultdict
-
+from subprocess import run, PIPE  
 
 def analyse_log_file(filepath):
     counts = defaultdict(int)
@@ -34,7 +34,8 @@ def divide_work(log_files, num_procs):
     for i, file in enumerate(log_files):
         chunks[i % num_procs].append(file)
     return chunks
-# Main Program----
+
+
 
 def main():
     comm = MPI.COMM_WORLD
@@ -48,9 +49,7 @@ def main():
 
     log_dir = sys.argv[1]
 
-
     # STEP 1: Master gathers list of .log files
-
     if rank == 0:
         if not os.path.isdir(log_dir):
             print(f"Error: {log_dir} is not a valid directory")
@@ -67,7 +66,6 @@ def main():
         print("Starting parallel analysis...\n")
 
         start_time = time.time()
-
         # Divide work among all processes (including master)
         chunks = divide_work(log_files, size)
     else:
@@ -75,46 +73,57 @@ def main():
         chunks = None
         start_time = None
 
-
     # STEP 2: Scatter file lists
-
-    # Each process receives its sub-list of files
     my_files = comm.scatter(chunks, root=0)
 
-
     # STEP 3: Each process analyses its assigned files
-
     local_counts = defaultdict(int)
     for log_file in my_files:
         counts = analyse_log_file(log_file)
         merge_counts(local_counts, counts)
 
-
     # STEP 4: Gather all results at master
-
     all_counts = comm.gather(local_counts, root=0)
 
-
     # STEP 5: Master merges results and prints summary
-
     if rank == 0:
         total_counts = defaultdict(int)
         for c in all_counts:
             merge_counts(total_counts, c)
 
         end_time = time.time()
+        total_time = end_time - start_time
 
         print("\n" + "="*50)
-        print("ANALYSIS RESULTS")
+        print("ANALYSIS RESULTS (PARALLEL)")
         print("="*50)
         for level in sorted(total_counts.keys()):
             print(f"{level}: {total_counts[level]}")
         print("="*50)
-        total_time = end_time - start_time
-        print(f"Total time: {total_time:.2f}s")
+        print(f"Parallel time: {total_time:.2f}s")
 
-        # Optional: compare with sequential baseline if known
-        print("="*50)
+        # Run sequential base_log_analyser.py for comparison
+        
+        print("\nRunning sequential version for comparison...")
+        seq_start = time.time()
+        result = run(
+            ["python3", "base_log_analyser.py", log_dir],
+            stdout=PIPE, stderr=PIPE, text=True
+        )
+        seq_end = time.time()
+        sequential_time = seq_end - seq_start
+
+        # Compute and display speedup
+        
+        if total_time > 0:
+            speedup = sequential_time / total_time
+            print("="*50)
+            print(f"Sequential time: {sequential_time:.2f}s")
+            print(f"Parallel time:   {total_time:.2f}s")
+            print(f"Speedup (T_seq / T_par): {speedup:.2f}x")
+            print("="*50)
+        else:
+            print("Parallel time too small to compute speedup safely.")
 
     comm.Barrier()  # ensure clean exit for all ranks
     MPI.Finalize()

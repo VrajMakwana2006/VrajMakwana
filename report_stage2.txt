@@ -94,7 +94,7 @@ c)CRASH
 7) (ADDITIONAL - CHALLENGES FACED)
    Early versions of code used blocking assignment everywhere and hence runtimes were very large. Changed probe() to Iprobe(), i.e., non-blocking assignment.
    Restarting without filtering already processed files caused duplicates. Added processed_files set and skip logic when rebuilding pending queue.
-
+   The loop "while assigned or pending" is necessary, but it led to last 2-3 files not being read because the workers complete their work, send work_result and      hence are removed from assigned, but they also send work_request, but pending is already empty and the no_more_work is sent to the workers, and hence loop        fails and few files were left unread. An additional drain phase was added for this. 
 8) LIMITATIONS
    Does not have any solution if the master itself fails. Re-election of new master will not happen and the program will just stop.
    

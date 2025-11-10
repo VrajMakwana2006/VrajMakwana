@@ -57,21 +57,22 @@ Starting distributed analysis...
 [Master] Assigning node9530.log to worker 1
 [Master] Assigning node4384.log to worker 3
   ...
-[Worker 2] Processing node5400.log
 [Master] Assigning node5400.log to worker 2
+[Worker 3] Processing node2177.log
+[Worker 2] Processing node5400.log
 
 =================================================
 ANALYSIS RESULTS
 =================================================
-DEBUG: 89429
-ERROR: 18401
-INFO: 152454
-WARN: 43908
+DEBUG: 89447
+ERROR: 18404
+INFO: 152485
+WARN: 43916
 =================================================
-Total time: 658.02s
-Files processed: 9998
+Total time: 649.78s
+Files processed: 10000
 Failed workers: 0
-Checkpoints saved: 1917
+Checkpoints saved: 2001
 =================================================
   
 c)CRASH

@@ -1,0 +1,84 @@
+1) FAULT DETECTION MECHANISM
+   The system uses heartbeats to detect worker failures. Every worker sends a small “I’m alive” message (HEARTBEAT tag) to the master after reading every 1000 lines while it is processing a log file. 
+   The master records the last time it heard from each worker in last_heartbeat[rank]. A background check compares the current time to each stored timestamp.
+   If a worker has been silent for > 4 seconds (HEARTBEAT_TIMEOUT), the master concludes that the worker has crashed or become unreachable. The master then informs the user/client that the worker has failed and then
+   initiates reassignment of the work.
+
+2) RECOVERY STRATEGY
+   Each worker’s current file is tracked in assigned[rank]. On failure detection, the master retrieves that filename, removes it from assigned, re-inserts it at the front of pending (it's a list which behaves as a stack),
+   The next worker that requests work automatically receives this file. The failed worker’s rank is added to failed_workers for reporting.
+
+3) CHECKPOINTING DESIGN
+   After every 5 files are processed by the workers, or at a normal termination, the master saves a checkpoint in checkpoint.json. Each checkpoint consists of - timestamp, counts(of the different tages like WARN etc.),
+   the number of processed files, pending files and failed workers.  
+
+4)TEST RESULTS 
+a)NORMAL
+  Found 10000 log file(s) to analyse (10000 remaining)
+Starting distributed analysis...
+
+[Worker 2] Processing node9421.log
+[Master] Assigning node9421.log to worker 2
+[Master] Assigning node6529.log to worker 1
+[Master] Assigning node5762.log to worker 3
+...
+
+=================================================
+ANALYSIS RESULTS
+=================================================
+DEBUG: 89447
+ERROR: 18404
+INFO: 152485
+WARN: 43916
+=================================================
+Total time: 641.24s
+Files processed: 10000
+Failed workers: 0
+Checkpoints saved: 2001
+=================================================
+
+b)RECOVERY
+  Found 10000 log file(s) to analyse (10000 remaining)
+Starting distributed analysis...
+
+[Worker 2] Processing node9421.log
+[Master] Assigning node9421.log to worker 2
+[Master] Assigning node6529.log to worker 1
+[Master] Assigning node5762.log to worker 3
+...
+    
+ Loading checkpoint from previous run...
+Resuming from checkpoint: 415 files already processed
+Found 10000 log file(s) to analyse (9583 remaining)
+Starting distributed analysis...
+
+[Worker 2] Processing node3914.log
+[Master] Assigning node3914.log to worker 2
+[Master] Assigning node9530.log to worker 1
+[Master] Assigning node4384.log to worker 3
+  ...
+
+  
+c)CRASH
+(Not simulated)
+
+
+
+
+5) CONSISTENCY MODEL FOLLOWED
+   The system follows eventual consistency. Each worker sends partial results immediately after finishing a file. The master merges those counts as soon as they arrive.
+   The trade-offs here are that the worker nodes wouldnt have to wait for the other workers to gain the same state of completion. This would lead to lower latency and hence faster result generation. It is ideal for 
+   our distributed system because we are not focused on the accuracy of our results right now but rather on increasing efficiency of the system.
+   Hence, Eventual consistency led to better throughput, and less coordination overhead.
+6) DESIGN DECISIONS
+   I dont know about interesting, but I found the decisions appropriate for this assignment.
+   Instead of time-based heartbeat generation, I have used a callback type heartbeat generation, because the former was complex to implement as it needed a new thread for timer-based heartbeat sending. 
+   I think the use of a stack data structure for assigning the pending files was a very interesting choice as it followed FIFO, and hence makes very easy to assign the files to workers, and also ensures fair distribution.
+
+7) (ADDITIONAL - CHALLENGES FACED)
+   Early versions of code used blocking assignment everywhere and hence runtimes were very large. Changed probe() to Iprobe(), i.e., non-blocking assignment.
+   Restarting without filtering already processed files caused duplicates. Added processed_files set and skip logic when rebuilding pending queue.
+
+8) LIMITATIONS
+   Does not have any solution if the master itself fails. Re-election of new master will not happen and the program will just stop.
+   

@@ -14,7 +14,6 @@ HEARTBEAT    = 5
 CHECKPOINT_DIR = "./checkpoints"
 CHECKPOINT_FILE = os.path.join(CHECKPOINT_DIR, "checkpoint.json")
 CHECKPOINT_INTERVAL = 5          # after every 5 processed files
-HEARTBEAT_INTERVAL = 1.0         # worker heartbeat frequency (sec)
 HEARTBEAT_TIMEOUT  = 4.0         # declare failure after this many seconds
 
 
@@ -72,7 +71,7 @@ def load_checkpoint():
     return counts, processed, pending, failed, True
 
 
-#  MASTER PROCESS
+# MASTER PROCESS 
 def master_process(comm, size, log_dir):
     all_files = [os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith(".log")]
 
@@ -100,12 +99,16 @@ def master_process(comm, size, log_dir):
                 if pending:
                     file = pending.pop(0)
                     assigned[src] = file
+                    # <-- FIX: update last_heartbeat when assigning so we don't time out immediately
+                    last_heartbeat[src] = time.monotonic()
                     comm.send(file, dest=src, tag=WORK_ASSIGN)
                     print(f"[Master] Assigning {os.path.basename(file)} to worker {src}")
                 else:
                     comm.send(None, dest=src, tag=NO_MORE_WORK)
 
             elif tag == WORK_RESULT:
+                # <-- FIX: update last_heartbeat on result arrival
+                last_heartbeat[src] = time.monotonic()
                 merge_counts(counts, msg["counts"])
                 processed.add(msg["file"])
                 assigned.pop(src, None)
@@ -125,10 +128,12 @@ def master_process(comm, size, log_dir):
             if (now - last) > HEARTBEAT_TIMEOUT and w in assigned:
                 print(f"[Master] Worker {w} timeout detected - marking as failed")
                 failed_workers.add(w)
+                # requeue file assigned to that worker
                 pending.insert(0, assigned[w])
                 print(f"[Master] Reassigning {os.path.basename(assigned[w])} to another worker")
                 assigned.pop(w, None)
-                last_heartbeat[w] = now  # reset so we don’t repeat instantly
+                # update timestamp so we don't repeatedly log for same worker instantly
+                last_heartbeat[w] = now
 
         time.sleep(0.1)
 
@@ -141,20 +146,20 @@ def master_process(comm, size, log_dir):
     checkpoints_saved += 1
 
     # FINAL OUTPUT 
-    print("\n" + "=" * 49)
+    print("\n" + "=" * 50)
     print("ANALYSIS RESULTS")
-    print("=" * 49)
+    print("=" * 50)
     for lvl in sorted(counts.keys()):
         print(f"{lvl}: {counts[lvl]}")
-    print("=" * 49)
+    print("=" * 50)
     print(f"Total time: {end_time - start_time:.2f}s")
     print(f"Files processed: {len(processed)}")
     print(f"Failed workers: {len(failed_workers)}")
     print(f"Checkpoints saved: {checkpoints_saved}")
-    print("=" * 49)
+    print("=" * 50)
 
 
-# WORKER PROCESS
+# WORKER PROCESS 
 def worker_process(comm, rank):
     master = 0
 
@@ -171,9 +176,16 @@ def worker_process(comm, rank):
             file = comm.recv(source=master, tag=WORK_ASSIGN)
             if file is None:
                 break
+            # <-- RECOMMENDED: send an immediate heartbeat before starting processing
+            # this helps the master know the worker is alive even for very small files
+            try:
+                comm.send(None, dest=master, tag=HEARTBEAT)
+            except:
+                pass
+
             print(f"[Worker {rank}] Processing {os.path.basename(file)}")
-            start = time.time()
             counts = analyse_log_file(file, hb_callback=heartbeat)
+            # send result and then request next work
             comm.send({"file": file, "counts": counts}, dest=master, tag=WORK_RESULT)
             comm.send(None, dest=master, tag=WORK_REQUEST)
 

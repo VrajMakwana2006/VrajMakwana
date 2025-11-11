@@ -89,7 +89,6 @@ def master_process(comm, size, log_dir):
     checkpoints_saved = 0
 
     while pending or assigned:
-        # Handle incoming messages
         while comm.Iprobe(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG):
             status = MPI.Status()
             msg = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
@@ -99,21 +98,21 @@ def master_process(comm, size, log_dir):
                 if pending:
                     file = pending.pop(0)
                     assigned[src] = file
-                    # <-- FIX: update last_heartbeat when assigning so we don't time out immediately
                     last_heartbeat[src] = time.monotonic()
                     comm.send(file, dest=src, tag=WORK_ASSIGN)
                     print(f"[Master] Assigning {os.path.basename(file)} to worker {src}")
                 else:
+                    # if pending empty but worker still had file, delay NO_MORE_WORK
+                    if src in assigned:
+                        continue
                     comm.send(None, dest=src, tag=NO_MORE_WORK)
 
             elif tag == WORK_RESULT:
-                # <-- FIX: update last_heartbeat on result arrival
                 last_heartbeat[src] = time.monotonic()
                 merge_counts(counts, msg["counts"])
                 processed.add(msg["file"])
                 assigned.pop(src, None)
                 processed_since_ckpt += 1
-
                 if processed_since_ckpt >= CHECKPOINT_INTERVAL:
                     save_checkpoint(counts, processed, pending, failed_workers)
                     checkpoints_saved += 1
@@ -122,20 +121,26 @@ def master_process(comm, size, log_dir):
             elif tag == HEARTBEAT:
                 last_heartbeat[src] = time.monotonic()
 
-        # Check for timeouts
+        # timeout check
         now = time.monotonic()
         for w, last in list(last_heartbeat.items()):
             if (now - last) > HEARTBEAT_TIMEOUT and w in assigned:
                 print(f"[Master] Worker {w} timeout detected - marking as failed")
                 failed_workers.add(w)
-                # requeue file assigned to that worker
                 pending.insert(0, assigned[w])
                 print(f"[Master] Reassigning {os.path.basename(assigned[w])} to another worker")
                 assigned.pop(w, None)
-                # update timestamp so we don't repeatedly log for same worker instantly
                 last_heartbeat[w] = now
 
-        time.sleep(0.1)
+        time.sleep(0.05)
+
+    # Drain phase
+    # Handle any results that arrived right after loop exit
+    while comm.Iprobe(source=MPI.ANY_SOURCE, tag=WORK_RESULT):
+        msg = comm.recv(source=MPI.ANY_SOURCE, tag=WORK_RESULT)
+        merge_counts(counts, msg["counts"])
+        processed.add(msg["file"])
+
 
     # tell all workers to stop
     for w in range(1, size):
@@ -145,18 +150,18 @@ def master_process(comm, size, log_dir):
     save_checkpoint(counts, processed, pending, failed_workers)
     checkpoints_saved += 1
 
-    # FINAL OUTPUT 
-    print("\n" + "=" * 50)
+    # FINAL OUTPUT
+    print("\n" + "=" * 49)
     print("ANALYSIS RESULTS")
-    print("=" * 50)
+    print("=" * 49)
     for lvl in sorted(counts.keys()):
         print(f"{lvl}: {counts[lvl]}")
-    print("=" * 50)
+    print("=" * 49)
     print(f"Total time: {end_time - start_time:.2f}s")
     print(f"Files processed: {len(processed)}")
     print(f"Failed workers: {len(failed_workers)}")
     print(f"Checkpoints saved: {checkpoints_saved}")
-    print("=" * 50)
+    print("=" * 49)
 
 
 # WORKER PROCESS 
@@ -197,7 +202,7 @@ def worker_process(comm, rank):
     return
 
 
-# MAIN 
+#  MAIN
 def main():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()

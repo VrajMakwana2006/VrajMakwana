@@ -75,9 +75,36 @@ Failed workers: 0
 Checkpoints saved: 2001
 =================================================
   
-c)CRASH
-(Not simulated)
+c)CRASH -(I missed the point where worker 2 stopped working but it was detected and the files reassigned correctly) 
+Found 10000 log file(s) to analyse (10000 remaining)
+Starting distributed analysis...
 
+[Worker 2] Processing node9421.log
+[Master] Assigning node9421.log to worker 2
+[Master] Assigning node6529.log to worker 1
+... 
+
+
+[Worker 1] Processing node5491.log
+[Master] Assigning node5491.log to worker 1
+[Worker 3] Processing node2177.log
+[Master] Assigning node2177.log to worker 3
+[Worker 1] Processing node5400.log
+[Master] Assigning node5400.log to worker 1
+
+=================================================
+ANALYSIS RESULTS
+=================================================
+DEBUG: 89447
+ERROR: 18404
+INFO: 152485
+WARN: 43916
+=================================================
+Total time: 523.50s
+Files processed: 10000
+Failed workers: 1
+Checkpoints saved: 2001
+=================================================
 
 
 

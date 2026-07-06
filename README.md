@@ -1,4 +1,4 @@
-# Distributed Log Analyser
+# Distributed Systems Simulation Project
 
 A log analysis system built in three stages — sequential, parallel, and fully distributed with fault tolerance — to explore how real distributed systems handle scale, failure, and recovery.
 
@@ -84,3 +84,4 @@ analysis.md                  # Analysis of a foundational distributed systems pa
 ## Background
 
 This project started as a distributed systems induction assignment (see `implementation.md` / `paper_reading.md` for the original task spec), paired with a reading/analysis component on a foundational distributed systems paper (`analysis.md`).
+This project was completed as part of the [DaSH Lab](https://github.com/DaSH-Lab-CSIS) induction process.
